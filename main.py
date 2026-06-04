@@ -448,7 +448,7 @@ class BgParticle:
 
 class App:
     def __init__(self):
-        pyxel.init(SCREEN_W, SCREEN_H, title="POCKET THE 9", fps=60, quit_key=pyxel.KEY_NONE)
+        pyxel.init(SCREEN_W, SCREEN_H, title="HIT THE BALL WITH A ROCKET", fps=60, quit_key=pyxel.KEY_NONE)
         try:
             self.use_gamepad = pyxel.gamepad_count() > 0
         except AttributeError:
@@ -1051,7 +1051,7 @@ class App:
             p.draw()
 
         # タイトル文字
-        title = "POCKET THE 9"
+        title = "HIT THE BALL WITH A ROCKET"
         tx = (SCREEN_W - len(title) * 4) // 2
         pyxel.text(tx + 1, 55, title, 0)
         pyxel.text(tx, 54, title, 10)
@@ -1194,7 +1194,10 @@ class App:
             pf = PLAYER_FRONT * pscale
             pb = PLAYER_BACK * pscale
             ps = PLAYER_SIDE * pscale
+            pt = (PLAYER_FRONT + 4) * pscale  # 先端（前方に突出）
 
+            xt = int(px + fa * pt)
+            yt = int(py + fb_s * pt)
             x0 = int(px + fa * pf + ra * ps)
             y0 = int(py + fb_s * pf + rb_s * ps)
             x1 = int(px + fa * pf - ra * ps)
@@ -1204,12 +1207,16 @@ class App:
             x3 = int(px - fa * pb + ra * ps)
             y3 = int(py - fb_s * pb + rb_s * ps)
 
+            # 5角形を3つの三角形で塗りつぶす
+            pyxel.tri(xt, yt, x0, y0, x1, y1, p_col)
             pyxel.tri(x0, y0, x1, y1, x2, y2, p_col)
             pyxel.tri(x0, y0, x2, y2, x3, y3, p_col)
-            pyxel.line(x0, y0, x1, y1, 7)
-            pyxel.line(x1, y1, x2, y2, 7)
-            pyxel.line(x2, y2, x3, y3, 7)
-            pyxel.line(x3, y3, x0, y0, 7)
+            # 5角形の輪郭（先端→右肩→右後→左後→左肩→先端）
+            pyxel.line(xt, yt, x0, y0, 7)
+            pyxel.line(x0, y0, x3, y3, 7)
+            pyxel.line(x3, y3, x2, y2, 7)
+            pyxel.line(x2, y2, x1, y1, 7)
+            pyxel.line(x1, y1, xt, yt, 7)
 
         hx = FIELD_L + 2
         hy = 5
