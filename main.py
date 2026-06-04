@@ -610,9 +610,7 @@ class App:
             self.balls.append(Ball(0, self.fr - 20, self.fb - 40, can_fall=True, is_chase=True))
         elif self.stage == 18:
             self.balls.append(Ball(0, self.fl + 20, self.fb - 40, can_fall=True, is_chase=True))
-        elif self.stage == 20:
-            self.balls.append(Ball(0, cx + 65, self.fb - 80, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL))
-            self.balls.append(Ball(0, cx - 65, self.fb - 80, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL))
+
 
     def _setup_stage_objects(self):
         self.walls = []
