@@ -19,7 +19,7 @@ STOP_SPD = 0.12
 PLAYER_SPD = 2.2
 PLAYER_ACCEL = 0.25
 FRICTION_P = 0.88
-FRICTION_CRASH = 0.96
+FRICTION_CRASH = 0.965
 CRASH_SPIN = 0.18
 TURN_RATE = 0.1
 PLAYER_FRONT = 7
@@ -33,13 +33,13 @@ BIG_BALL_R = 18
 SMALL_BALL_R = 4
 FRICTION_SMALL = FRICTION_B
 BALL_MASS = 1.0
-BIG_BALL_MASS = 4.0
+BIG_BALL_MASS = 8.0
 SMALL_BALL_MASS = 0.125
 PLAYER_MASS = 1.0
 CHASE_ACCEL = 0.025
 CHASE_MAX_SPD = 3.5
 REPULSION_R = 40
-REPULSION_STR = 0.27
+REPULSION_STR = 0.253
 TURRET_R = 10
 TURRET_SHOT_SPD = 4.5
 TURRET_COOLDOWN = 25
@@ -227,6 +227,7 @@ class Turret:
         self.hit_timer = 0
         self.cooldown = 0
         self.n_shots = n_shots
+        self.just_fired = False
 
     def _overlap(self, ox, oy, r):
         dx = ox - self.x
@@ -258,7 +259,7 @@ class Turret:
             fdx, fdy = math.cos(a), math.sin(a)
             sx = self.x + fdx * (TURRET_R + SMALL_BALL_R + 1)
             sy = self.y + fdy * (TURRET_R + SMALL_BALL_R + 1)
-            cb = Ball(0, sx, sy, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL, ttl=60)
+            cb = Ball(0, sx, sy, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL, ttl=66)
             cb.is_cannonball = True
             cb.mass = BALL_MASS
             cb.vx = fdx * TURRET_SHOT_SPD
@@ -266,6 +267,7 @@ class Turret:
             balls.append(cb)
         self.hit_timer = 8
         self.cooldown = TURRET_COOLDOWN
+        self.just_fired = True
 
     def check_ball(self, b, balls):
         res = self._overlap(b.x, b.y, b.r)
@@ -297,6 +299,7 @@ class Turret:
             self._fire(orig_x, orig_y, balls)
 
     def update(self):
+        self.just_fired = False
         if self.hit_timer > 0:
             self.hit_timer -= 1
         if self.cooldown > 0:
@@ -471,7 +474,7 @@ class App:
         pyxel.sounds[2].mml("T90 @1 V90 O5 L8 C<BAGF2")         # ゲームオーバージングル（C-B-A-G-Fの下降メロディ）
         pyxel.sounds[3].mml("@env1{90,5,10,30,0} o6a64")               # カーソル移動音（高音の短い一音）
         pyxel.sounds[4].mml("T150 @0 @GLI1{1000,70} @ENV1{100,64,50} o5c2")     # ボールポケットイン音（速い下降スケール）
-        pyxel.sounds[5].mml("T180 @3 V100 O5 L16 CC")            # 残機減少音（低めの2音）
+        pyxel.sounds[5].mml("@3 V100 O5 L16 CC")            # 残機減少音（低めの2音）
         # 反射音16段階：低音（O2A）→高音（O5A）、1秒以内に重なるごとに音程が上がる
         _hit_notes = [
             "@env1{90,5,10,30,0} o5c4",  # 0
@@ -494,6 +497,8 @@ class App:
         for i, note in enumerate(_hit_notes):
             pyxel.sounds[6 + i].mml(f"@env1{{90,5,0}} {note}")
         pyxel.sounds[22].mml("T150 @0 @GLI1{1000,70} @ENV1{100,64,50} o5c2")  # 落下音（2オクターブ下降）
+        pyxel.sounds[23].mml("@0 @GLI1{-600,11} @ENV1{100,30,0} o5g4")           # ジェットバンパー起動音（上昇アルペジオ）
+        pyxel.sounds[24].mml("@env1{90,20,20} @3 o6 L16 C")             # 砲台発射音（ノイズバースト）
 
     def _update_input_device(self):
         if any(pyxel.btnp(b) for b in _GAMEPAD_WATCH):
@@ -532,7 +537,7 @@ class App:
         self.p = Player(cx - 1, start_y)
         self.tnum = 1
         self.state = "play"
-        self.lives = 3
+        self.lives = 5
         self.hole_x, self.hole_y = self._place_hole()
         self._place_balls()
         self._setup_stage_objects()
@@ -543,6 +548,7 @@ class App:
         self.hole_fall_start_y = 0.0
         self.gameover_from_hole = False
         self.hit_cooldown = 0
+        self.damage_cooldown = 0
         self.hit_level = 0
         self.hit_level_timer = 0
         self.sfx_ch_idx = 0
@@ -589,7 +595,7 @@ class App:
             self.balls.append(Ball(0, self.fr - 20, self.ft + 40, can_fall=True, is_chase=True))
         elif self.stage == 11:
             for sx, sy in [(cx - 70, self.ft + 55), (cx + 70, self.ft + 55),
-                           (cx - 70, self.fb - 70)]:
+                           (cx - 70, self.fb - 70), (cx + 70, self.fb - 70)]:
                 self.balls.append(Ball(0, sx, sy, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL))
         elif self.stage == 12:
             mid_y = (self.ft + self.fb) / 2.0
@@ -599,17 +605,22 @@ class App:
         elif self.stage == 14:
             self.balls.append(Ball(0, cx - 60, self.fb - 65, can_fall=True))
             self.balls.append(Ball(0, cx + 60, self.fb - 65, can_fall=True))
+            self.balls.append(Ball(0, self.fl + 30, self.ft + 50, can_fall=True))
         elif self.stage == 15:
             cx = (self.fl + self.fr) / 2.0
-            self.balls.append(Ball(0, cx - 60, self.fb - 65, can_fall=True))
+            self.balls.append(Ball(0, cx - 40, self.fb - 65, can_fall=True))
             self.balls.append(Ball(0, cx - 90, self.fb - 65, can_fall=True))
         elif self.stage == 17:
-            self.balls.append(Ball(0, self.fl + 30, self.fb - 50, r=BIG_BALL_R, can_fall=False))
+            self.balls.append(Ball(0, self.hole_x, self.hole_y, r=BIG_BALL_R, can_fall=False))
             self.balls.append(Ball(0, cx + 70, self.fb - 70, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL))
             self.balls.append(Ball(0, cx - 40, self.fb - 55, r=SMALL_BALL_R, can_fall=True, friction=FRICTION_SMALL))
             self.balls.append(Ball(0, self.fr - 20, self.fb - 40, can_fall=True, is_chase=True))
+            self.balls.append(Ball(0, self.fl + 32, self.fb - 73, can_fall=True))
+            self.balls.append(Ball(0, self.fr - 33, self.fb - 73, can_fall=True))
         elif self.stage == 18:
             self.balls.append(Ball(0, self.fl + 20, self.fb - 40, can_fall=True, is_chase=True))
+        elif self.stage == 20:
+            self.balls.append(Ball(0, self.fr - 20, self.fb - 40, can_fall=True, is_chase=True))
 
 
     def _setup_stage_objects(self):
@@ -667,6 +678,10 @@ class App:
                 Turret(200, 180, n_shots=2),
             ]
         elif self.stage == 15:
+            mid_y = (self.ft + self.fb) / 2.0
+            self.walls = [
+                RectWall(55, mid_y - 50, 16, 100),
+            ]
             self.turrets = [
                 Turret(200, 180, n_shots=2),
             ]
@@ -747,7 +762,7 @@ class App:
                     if self.gameover_cursor == 0:
                         self._init_stage()
                     else:
-                        self.stage = 1
+                        self.selected_stage = self.stage
                         self.menu_cursor = 1
                         self.scene = "title"
             elif self.state == "clear":
@@ -756,7 +771,7 @@ class App:
                         self.stage += 1
                         self._init_stage()
                     else:
-                        self.stage = 1
+                        self.selected_stage = self.stage
                         self.menu_cursor = 1
                         self.scene = "title"
             elif self.state == "pause_confirm":
@@ -772,7 +787,7 @@ class App:
                     pyxel.play(self._next_sfx_ch(), 3)
                 if pyxel.btnp(pyxel.KEY_SPACE) or pyxel.btnp(pyxel.GAMEPAD1_BUTTON_A):
                     if self.pause_cursor == 0:
-                        self.stage = 1
+                        self.selected_stage = self.stage
                         self.menu_cursor = 1
                         self.scene = "title"
                     else:
@@ -785,6 +800,7 @@ class App:
             return
 
         self.hit_cooldown = max(0, self.hit_cooldown - 1)
+        self.damage_cooldown = max(0, self.damage_cooldown - 1)
         if self.hit_level_timer > 0:
             self.hit_level_timer -= 1
             if self.hit_level_timer == 0:
@@ -811,7 +827,7 @@ class App:
             bmp.update()
             bmp.check_player(self.p)
             if bmp.hit_timer == 6 and self.hit_cooldown <= 0:
-                self._play_hit_sound()
+                pyxel.play(self._next_sfx_ch(), 23)
                 self.hit_cooldown = 8
 
         for t in self.turrets:
@@ -860,12 +876,16 @@ class App:
                 prev = bmp.hit_timer
                 bmp.check_ball(b)
                 if prev < 6 and bmp.hit_timer == 6 and self.hit_cooldown <= 0:
-                    self._play_hit_sound()
+                    pyxel.play(self._next_sfx_ch(), 23)
                     self.hit_cooldown = 8
 
         for t in self.turrets:
             for b in active:
                 t.check_ball(b, self.balls)
+
+        for t in self.turrets:
+            if t.just_fired:
+                pyxel.play(self._next_sfx_ch(), 24)
 
         for rz in self.repulsion_zones:
             for b in active:
@@ -876,7 +896,7 @@ class App:
         for b in active:
             if b.can_fall and math.hypot(b.x - self.hole_x, b.y - self.hole_y) < HOLE_R:
                 b.active = False
-                if b.num != 9:
+                if b.num != 9 and not b.is_cannonball:
                     pyxel.play(self._next_sfx_ch(), 4)
         active = [b for b in self.balls if b.active]
 
@@ -911,6 +931,12 @@ class App:
             if d < PLAYER_R + b.r:
                 if self.p.crash:
                     self._strike(b)
+                    if b.num != self.tnum and self.damage_cooldown <= 0:
+                        self.p.spin_angle = 0.0
+                        self._lose_life()
+                        self.damage_cooldown = 15
+                        if self.state == "dying":
+                            return
                     continue
                 if b.num == self.tnum:
                     self._strike(b)
@@ -1133,36 +1159,6 @@ class App:
         pyxel.circ(int(self.hole_x), int(self.hole_y), HOLE_R, 0)
         pyxel.circb(int(self.hole_x), int(self.hole_y), HOLE_R, 5)
 
-        for b in self.balls:
-            if not b.active:
-                continue
-            if b.is_chase:
-                bx, by = int(b.x), int(b.y)
-                pyxel.circ(bx, by, b.r, 8)
-                pyxel.circb(bx, by, b.r, 9)
-                pyxel.text(bx - 2, by - 3, "C", 7)
-            elif b.num == 0 and b.r < BALL_R:
-                if b.is_cannonball:
-                    pyxel.circ(int(b.x), int(b.y), b.r, 9)
-                    pyxel.circb(int(b.x), int(b.y), b.r, 8)
-                else:
-                    pyxel.circ(int(b.x), int(b.y), b.r, 12)
-                    pyxel.circb(int(b.x), int(b.y), b.r, 7)
-            elif b.num == 0:
-                pyxel.circ(int(b.x), int(b.y), b.r, 13)
-                pyxel.circb(int(b.x), int(b.y), b.r, 7)
-            else:
-                bx, by = int(b.x), int(b.y)
-                if b.num == 9:
-                    pyxel.circ(bx, by, b.r, 10)
-                    pyxel.circ(bx, by, b.r - 3, 7)
-                    pyxel.circb(bx, by, b.r, 7 if self.tnum == 9 else 10)
-                else:
-                    col = 7 if b.num == self.tnum else 6
-                    pyxel.circ(bx, by, b.r, col)
-                    pyxel.circb(bx, by, b.r, 7)
-                pyxel.text(bx - 2, by - 3, str(b.num), 0)
-
         if self.p.crash:
             p_col, trail_hi, trail_mid = 8, 8, 2
         elif self.lives >= 3:
@@ -1179,6 +1175,36 @@ class App:
                 ratio = i / max(n - 1, 1)
                 col = trail_hi if ratio > 0.65 else (trail_mid if ratio > 0.3 else 1)
                 pyxel.pset(int(tx), int(ty), col)
+
+        for b in self.balls:
+            if not b.active:
+                continue
+            if b.is_chase:
+                bx, by = int(b.x), int(b.y)
+                pyxel.circ(bx, by, b.r, 8)
+                pyxel.circb(bx, by, b.r, 9)
+                pyxel.text(bx - 2, by - 3, "C", 7)
+            elif b.num == 0 and b.r < BALL_R:
+                if b.is_cannonball:
+                    pyxel.circ(int(b.x), int(b.y), b.r, 9)
+                    pyxel.circb(int(b.x), int(b.y), b.r, 8)
+                else:
+                    pyxel.circ(int(b.x), int(b.y), b.r, 13)
+                    pyxel.circb(int(b.x), int(b.y), b.r, 7)
+            elif b.num == 0:
+                pyxel.circ(int(b.x), int(b.y), b.r, 13)
+                pyxel.circb(int(b.x), int(b.y), b.r, 7)
+            else:
+                bx, by = int(b.x), int(b.y)
+                if b.num == 9:
+                    pyxel.circ(bx, by, b.r, 10)
+                    pyxel.circ(bx, by, b.r - 3, 7)
+                    pyxel.circb(bx, by, b.r, 7 if self.tnum == 9 else 10)
+                else:
+                    col = 7 if b.num == self.tnum else 6
+                    pyxel.circ(bx, by, b.r, col)
+                    pyxel.circb(bx, by, b.r, 7)
+                pyxel.text(bx - 2, by - 3, str(b.num), 0)
 
         if not (self.state == "gameover" and self.gameover_from_hole):
             px, py = self.p.x, self.p.y
